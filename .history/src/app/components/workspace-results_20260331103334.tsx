@@ -6,7 +6,7 @@ import {
   ReferenceLine, Cell, Label,
 } from 'recharts';
 import {
-  Sparkles, Loader2, ChevronDown, Eye, EyeOff, Star,
+  Sparkles, Loader2, ChevronDown, Eye, EyeOff,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -53,8 +53,6 @@ export interface WorkspaceResultsProps {
   stage: number;
   hiddenRecipeIds?: string[];
   onToggleRecipeVisibility?: (recipeId: string) => void;
-  starredRecipeIds?: string[];
-  onToggleRecipeStar?: (recipeId: string) => void;
   canvasCards?: CanvasCard[];
   onRemoveCard?: (id: string) => void;
   onUpdateCard?: (id: string, patch: Partial<CanvasCard>) => void;
@@ -161,7 +159,7 @@ function AxisSelect({ label, value, onChange, exclude }: { label: string; value:
 
 /* ── Stage-5 scatter plot (chart-only, no formulation tab) ──── */
 
-function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [] }: { recipes?: any[]; hiddenRecipeIds?: string[]; starredRecipeIds?: string[] }) {
+function RecipeScatterPlot({ recipes, hiddenRecipeIds = [] }: { recipes?: any[]; hiddenRecipeIds?: string[] }) {
   const [xKey, setXKey] = useState<AxisKey>('spf');
   const [yKey, setYKey] = useState<AxisKey>('wr');
   const [selectedRecipe, setSelectedRecipe] = useState<string>('R-047');
@@ -169,24 +167,21 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
   const xOpt = AXIS_OPTIONS.find((o) => o.key === xKey)!;
   const yOpt = AXIS_OPTIONS.find((o) => o.key === yKey)!;
   const hidden = new Set(hiddenRecipeIds);
-  const starred = new Set(starredRecipeIds);
   const data = (recipes?.length ? recipes : ALL_RECIPES)
     .filter((r: any) => r.id === 'Baseline' || !hidden.has(r.id))
-    .map((r: any) => ({ ...r, isStarred: Boolean(r.isStarred) || starred.has(r.id) }));
-  const historicalData = data.filter((r: any) => r.isHistorical);
-  const recipeData = data.filter((r: any) => !r.isHistorical);
+    .map((r: any) => ({ ...r }));
 
   useEffect(() => {
-    const lead = recipeData.find((r: any) => r.isLead)?.id;
+    const lead = data.find((r: any) => r.isLead)?.id;
     if (lead) {
       setSelectedRecipe(lead);
       return;
     }
-    if (!recipeData.some((r: any) => r.id === selectedRecipe)) {
-      const firstRecipe = recipeData.find((r: any) => r.id !== 'Baseline')?.id;
+    if (!data.some((r: any) => r.id === selectedRecipe)) {
+      const firstRecipe = data.find((r: any) => r.id !== 'Baseline')?.id;
       if (firstRecipe) setSelectedRecipe(firstRecipe);
     }
-  }, [recipeData, selectedRecipe]);
+  }, [data, selectedRecipe]);
 
   const CustomDot = (props: any) => {
     const { cx, cy, payload } = props;
@@ -195,19 +190,14 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
     const isSelected = r.id === selectedRecipe;
     const isHighlighted = r.isTop3 || r.id === 'Baseline';
     const clickable = r.id !== 'Baseline';
-    const size = 6;
+    const baseR = r.isTop3 ? 9 : r.id === 'Baseline' ? 7 : 5;
+    const size = isSelected ? baseR * 1.5 : baseR;
 
     return (
       <g onClick={() => clickable && setSelectedRecipe(r.id)} style={{ cursor: clickable ? 'pointer' : 'default' }} pointerEvents="all">
         <circle cx={cx} cy={cy} r={Math.max(size + 8, 12)} fill="transparent" />
         {isSelected && <circle cx={cx} cy={cy} r={size + 6} fill={r.color} fillOpacity={0.18} stroke={r.color} strokeWidth={1.5} strokeDasharray="3 2" />}
-        {r.isStarred ? (
-          <text x={cx} y={cy + 3} textAnchor="middle" fontSize={Math.max(10, size + 3)} fontWeight={700} fill={r.color} stroke={isSelected ? 'white' : 'none'} strokeWidth={isSelected ? 1.2 : 0}>
-            ★
-          </text>
-        ) : (
-          <circle cx={cx} cy={cy} r={size} fill={r.color} fillOpacity={isHighlighted || isSelected ? (isSelected ? 1 : 0.85) : 0.45} stroke={isHighlighted || isSelected ? 'white' : 'none'} strokeWidth={isSelected ? 2.5 : 1.5} />
-        )}
+        <circle cx={cx} cy={cy} r={size} fill={r.color} fillOpacity={isHighlighted || isSelected ? (isSelected ? 1 : 0.85) : 0.45} stroke={isHighlighted || isSelected ? 'white' : 'none'} strokeWidth={isSelected ? 2.5 : 1.5} />
         {(isHighlighted || isSelected) && (
           <text x={cx} y={cy - size - 6} textAnchor="middle" fontSize={isSelected ? 10 : 9} fontWeight={isSelected ? 700 : 600} fill={r.color} pointerEvents="none">
             {r.isLead ? `★ ${r.id}` : r.id}
@@ -217,25 +207,7 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
     );
   };
 
-  const HistoricalDot = (props: any) => {
-    const { cx, cy } = props;
-    if (!cx || !cy) return null;
-    return (
-      <circle
-        cx={cx}
-        cy={cy}
-        r={6}
-        fill="#d1d5db"
-        fillOpacity={0.58}
-        stroke="#e5e7eb"
-        strokeOpacity={0.72}
-        strokeWidth={1}
-        style={{ filter: 'drop-shadow(0px 1px 2px rgba(148,163,184,0.35))' }}
-      />
-    );
-  };
-
-  const LEGEND_ITEMS = recipeData.filter((r: any) => r.isTop3 || r.id === 'Baseline');
+  const LEGEND_ITEMS = data.filter((r: any) => r.isTop3 || r.id === 'Baseline');
 
   return (
     <div className="flex flex-col h-full">
@@ -257,9 +229,6 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
           <span className="text-[10px] text-gray-400 flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />Other
           </span>
-          <span className="text-[10px] text-gray-400 flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />Historical
-          </span>
         </div>
       </div>
 
@@ -277,8 +246,7 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
             <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
             {xOpt.refLine && <ReferenceLine x={xOpt.refLine.val} stroke={xOpt.refLine.color} strokeDasharray="4 3" label={{ value: xOpt.refLine.label, fill: xOpt.refLine.color, fontSize: 10, position: 'top' }} />}
             {yOpt.refLine && <ReferenceLine y={yOpt.refLine.val} stroke={yOpt.refLine.color} strokeDasharray="4 3" label={{ value: yOpt.refLine.label, fill: yOpt.refLine.color, fontSize: 10, position: 'insideRight' }} />}
-            <Scatter data={historicalData} shape={<HistoricalDot />} name="Historical" isAnimationActive={false} />
-            <Scatter data={recipeData} shape={<CustomDot />} isAnimationActive={false} />
+            <Scatter data={data} shape={<CustomDot />} isAnimationActive={false} />
           </ScatterChart>
         </ResponsiveContainer>
       </div>
@@ -392,7 +360,7 @@ function LoadingState() {
   );
 }
 
-function ResultTable({ config, onToggleRecipeVisibility, onToggleRecipeStar }: { config: TableConfig; onToggleRecipeVisibility?: (recipeId: string) => void; onToggleRecipeStar?: (recipeId: string) => void }) {
+function ResultTable({ config, onToggleRecipeVisibility }: { config: TableConfig; onToggleRecipeVisibility?: (recipeId: string) => void }) {
   const getAlignClass = (align?: 'left' | 'right' | 'center') => {
     if (align === 'right') return 'text-right';
     if (align === 'center') return 'text-center';
@@ -416,21 +384,6 @@ function ResultTable({ config, onToggleRecipeVisibility, onToggleRecipeStar }: {
           title={visible ? 'Hide on scatter' : 'Show on scatter'}
         >
           {visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-        </button>
-      );
-    }
-
-    if (column.key === 'starred') {
-      const recipeId = String(row.recipe ?? '');
-      const starred = Boolean(value);
-      return (
-        <button
-          type="button"
-          onClick={() => recipeId && onToggleRecipeStar?.(recipeId)}
-          className={`inline-flex items-center justify-center w-full transition-colors ${starred ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-amber-500'}`}
-          title={starred ? 'Unstar recipe' : 'Star recipe'}
-        >
-          <Star className={`w-3.5 h-3.5 ${starred ? 'fill-current' : ''}`} />
         </button>
       );
     }
@@ -527,7 +480,7 @@ function ResultTable({ config, onToggleRecipeVisibility, onToggleRecipeStar }: {
 
 /* ── Main component ──────────────────────────────────────────── */
 
-export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoading, hasRun, stage, hiddenRecipeIds = [], onToggleRecipeVisibility, starredRecipeIds = [], onToggleRecipeStar }: WorkspaceResultsProps) {
+export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoading, hasRun, stage, hiddenRecipeIds = [], onToggleRecipeVisibility }: WorkspaceResultsProps) {
   if (isLoading) {
     return <div className="h-full flex flex-col bg-[#f8f9fb]"><LoadingState /></div>;
   }
@@ -540,7 +493,7 @@ export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoadin
     if (!table) {
       return <div className="h-full flex flex-col bg-[#f8f9fb]"><EmptyState /></div>;
     }
-    return <ResultTable config={table} onToggleRecipeVisibility={onToggleRecipeVisibility} onToggleRecipeStar={onToggleRecipeStar} />;
+    return <ResultTable config={table} onToggleRecipeVisibility={onToggleRecipeVisibility} />;
   }
 
   if (!chart) {
@@ -556,7 +509,7 @@ export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoadin
           <div className="text-[10px] text-gray-400">{chart.subtitle}</div>
         </div>
         <div className="flex-1 min-h-0">
-          <RecipeScatterPlot recipes={chart.data} hiddenRecipeIds={hiddenRecipeIds} starredRecipeIds={starredRecipeIds} />
+          <RecipeScatterPlot recipes={chart.data} hiddenRecipeIds={hiddenRecipeIds} />
         </div>
       </div>
     );

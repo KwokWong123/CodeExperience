@@ -177,16 +177,16 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
   const recipeData = data.filter((r: any) => !r.isHistorical);
 
   useEffect(() => {
-    const lead = recipeData.find((r: any) => r.isLead)?.id;
+    const lead = data.find((r: any) => r.isLead)?.id;
     if (lead) {
       setSelectedRecipe(lead);
       return;
     }
-    if (!recipeData.some((r: any) => r.id === selectedRecipe)) {
-      const firstRecipe = recipeData.find((r: any) => r.id !== 'Baseline')?.id;
+    if (!data.some((r: any) => r.id === selectedRecipe)) {
+      const firstRecipe = data.find((r: any) => r.id !== 'Baseline')?.id;
       if (firstRecipe) setSelectedRecipe(firstRecipe);
     }
-  }, [recipeData, selectedRecipe]);
+  }, [data, selectedRecipe]);
 
   const CustomDot = (props: any) => {
     const { cx, cy, payload } = props;
@@ -195,7 +195,8 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
     const isSelected = r.id === selectedRecipe;
     const isHighlighted = r.isTop3 || r.id === 'Baseline';
     const clickable = r.id !== 'Baseline';
-    const size = 6;
+    const baseR = r.isTop3 ? 9 : r.id === 'Baseline' ? 7 : 5;
+    const size = isSelected ? baseR * 1.5 : baseR;
 
     return (
       <g onClick={() => clickable && setSelectedRecipe(r.id)} style={{ cursor: clickable ? 'pointer' : 'default' }} pointerEvents="all">
@@ -214,24 +215,6 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
           </text>
         )}
       </g>
-    );
-  };
-
-  const HistoricalDot = (props: any) => {
-    const { cx, cy } = props;
-    if (!cx || !cy) return null;
-    return (
-      <circle
-        cx={cx}
-        cy={cy}
-        r={6}
-        fill="#d1d5db"
-        fillOpacity={0.58}
-        stroke="#e5e7eb"
-        strokeOpacity={0.72}
-        strokeWidth={1}
-        style={{ filter: 'drop-shadow(0px 1px 2px rgba(148,163,184,0.35))' }}
-      />
     );
   };
 
@@ -257,9 +240,6 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
           <span className="text-[10px] text-gray-400 flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />Other
           </span>
-          <span className="text-[10px] text-gray-400 flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />Historical
-          </span>
         </div>
       </div>
 
@@ -277,7 +257,7 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
             <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
             {xOpt.refLine && <ReferenceLine x={xOpt.refLine.val} stroke={xOpt.refLine.color} strokeDasharray="4 3" label={{ value: xOpt.refLine.label, fill: xOpt.refLine.color, fontSize: 10, position: 'top' }} />}
             {yOpt.refLine && <ReferenceLine y={yOpt.refLine.val} stroke={yOpt.refLine.color} strokeDasharray="4 3" label={{ value: yOpt.refLine.label, fill: yOpt.refLine.color, fontSize: 10, position: 'insideRight' }} />}
-            <Scatter data={historicalData} shape={<HistoricalDot />} name="Historical" isAnimationActive={false} />
+            <Scatter data={historicalData} fill="#9ca3af" name="Historical" isAnimationActive={false} />
             <Scatter data={recipeData} shape={<CustomDot />} isAnimationActive={false} />
           </ScatterChart>
         </ResponsiveContainer>

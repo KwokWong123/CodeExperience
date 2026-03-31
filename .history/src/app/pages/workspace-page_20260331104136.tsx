@@ -467,49 +467,18 @@ function metricFromObjective(recipe: LiveRecipe, objective: Objective): number {
 function objectiveFitScore(recipe: LiveRecipe, objective: Objective, weight: number): number {
   const metric = metricFromObjective(recipe, objective);
   const target = parseTargetNumber(objective.value);
-  const min = typeof objective.min === 'number' ? objective.min : null;
-  const max = typeof objective.max === 'number' ? objective.max : null;
 
   let fit = 0.5;
-  if (objective.target === 'range' && min !== null && max !== null && max > min) {
-    if (metric >= min && metric <= max) {
-      fit = 1;
-    } else {
-      const width = Math.max(1e-6, max - min);
-      const dist = metric < min ? min - metric : metric - max;
-      fit = Math.max(0, 1 - dist / width);
-    }
-  } else if (objective.target === 'maximize') {
+  if (objective.target === 'maximize') {
     if (target && target > 0) fit = Math.max(0, Math.min(1, metric / target));
-    else if (max !== null && max > 0) fit = Math.max(0, Math.min(1, metric / max));
     else fit = Math.max(0, Math.min(1, (metric + 20) / 120));
   } else if (objective.target === 'minimize') {
     if (objective.attribute.toLowerCase().includes('cost')) {
       fit = Math.max(0, Math.min(1, (-metric) / 20));
     } else if (target && target > 0) {
       fit = Math.max(0, Math.min(1, target / Math.max(metric, 1e-6)));
-    } else if (min !== null && min >= 0) {
-      fit = Math.max(0, Math.min(1, min / Math.max(metric, 1e-6)));
     } else {
       fit = Math.max(0, Math.min(1, 1 - metric / 100));
-    }
-  }
-
-  // Apply a soft penalty when metric falls outside objective min/max bounds.
-  // This lets min/max sliders act like objective-side constraints during ranking.
-  if (min !== null || max !== null) {
-    let boundPenalty = 0;
-    if (min !== null && metric < min) boundPenalty += min - metric;
-    if (max !== null && metric > max) boundPenalty += metric - max;
-
-    if (boundPenalty > 0) {
-      const scale = (() => {
-        if (min !== null && max !== null && max > min) return max - min;
-        if (target !== null && Math.abs(target) > 1e-6) return Math.abs(target);
-        return 20;
-      })();
-      const multiplier = Math.max(0, 1 - boundPenalty / Math.max(1e-6, scale));
-      fit *= multiplier;
     }
   }
 
@@ -598,13 +567,14 @@ function buildLiveStage5Result(
     return `hsl(${hue} ${saturation}% ${lightness}%)`;
   };
 
-  const rankedRecipes = recipes.map((r, idx) => ({
+  const top25 = recipes.slice(0, 25).map((r, idx) => ({
     ...r,
     isTop3: idx < 3,
     isLead: idx === 0,
     color: rankColor(idx),
   }));
-  const top25 = rankedRecipes.slice(0, 25);
+  const top3 = top25.slice(0, 3);
+  const top25Ids = new Set(top25.map((r) => r.id));
 
   const baseline: LiveRecipe = {
     id: 'Baseline',
@@ -627,7 +597,13 @@ function buildLiveStage5Result(
 
   const liveRecipeSeries = [
     baseline,
-    ...rankedRecipes,
+    ...top25,
+    ...recipes.slice(25).map((r) => ({
+      ...r,
+      color: '#cbd5e1',
+      isTop3: false,
+      isLead: false,
+    })),
   ];
 
   const historicalSeries = Array.from({ length: 75 }, (_, idx) => {
@@ -821,7 +797,7 @@ export function WorkspacePage() {
       5: {
         chart: {
           ...STAGE_RESULTS[5].chart,
-          subtitle: 'Live optimization with historical/training overlay',
+          subtitle: 'Live optimization from current objectives and constraints',
           data: liveStage5.chartData,
         },
         table: {

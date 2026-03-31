@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { createRoot, Root } from 'react-dom/client';
-import { WorkspaceConfigPanel, Constraint as WorkspaceConstraint } from '../components/workspace-config-panel';
+import { WorkspaceConfigPanel } from '../components/workspace-config-panel';
 import { ChartConfig, TableConfig, ResultChart } from '../components/workspace-results';
 import { InsightsPanel, Insight, ModelMetrics } from '../components/insights-panel';
 import { ArtifactsLibrary, LibraryArtifact } from '../components/artifacts-library';
@@ -412,280 +412,6 @@ const QUICK_PROMPTS: Record<number, Array<{ label: string; message: string; emoj
   6: [],
 };
 
-const DEFAULT_LIVE_CONSTRAINTS: WorkspaceConstraint[] = [
-  { id: 'c1', ingredient: 'Zinc Oxide', min: 5, max: 25, unit: '% w/w', type: 'regulatory' },
-  { id: 'c2', ingredient: 'Titanium Dioxide', min: 0, max: 25, unit: '% w/w', type: 'regulatory' },
-  { id: 'c3', ingredient: 'Avobenzone', min: 0, max: 5, unit: '% w/w', type: 'regulatory' },
-  { id: 'c4', ingredient: 'Octocrylene', min: 0, max: 10, unit: '% w/w', type: 'regulatory' },
-  { id: 'c5', ingredient: 'Total UV Filters', min: 5, max: 35, unit: '% w/w', type: 'process' },
-  { id: 'c6', ingredient: 'pH', min: 5.0, max: 7.5, unit: '', type: 'process' },
-];
-
-type LiveRecipe = {
-  id: string;
-  zno: number;
-  tio2: number;
-  avobenzone: number;
-  octocrylene: number;
-  cyclopentasiloxane: number;
-  dimethicone: number;
-  aqua: number;
-  spf: number;
-  wr: number;
-  stability: number;
-  score: number;
-  costDelta: number;
-  isLead: boolean;
-  isTop3: boolean;
-  color: string;
-};
-
-function seededRand(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 16807) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-}
-
-function parseTargetNumber(value?: number | string): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value !== 'string') return null;
-  const match = value.match(/-?\d+(?:\.\d+)?/);
-  return match ? parseFloat(match[0]) : null;
-}
-
-function metricFromObjective(recipe: LiveRecipe, objective: Objective): number {
-  const key = objective.attribute.toLowerCase();
-  if (key.includes('spf')) return recipe.spf;
-  if (key.includes('water')) return recipe.wr;
-  if (key.includes('stability')) return recipe.stability;
-  if (key.includes('cost')) return recipe.costDelta;
-  return recipe.score;
-}
-
-function objectiveFitScore(recipe: LiveRecipe, objective: Objective, weight: number): number {
-  const metric = metricFromObjective(recipe, objective);
-  const target = parseTargetNumber(objective.value);
-  const min = typeof objective.min === 'number' ? objective.min : null;
-  const max = typeof objective.max === 'number' ? objective.max : null;
-
-  let fit = 0.5;
-  if (objective.target === 'range' && min !== null && max !== null && max > min) {
-    if (metric >= min && metric <= max) {
-      fit = 1;
-    } else {
-      const width = Math.max(1e-6, max - min);
-      const dist = metric < min ? min - metric : metric - max;
-      fit = Math.max(0, 1 - dist / width);
-    }
-  } else if (objective.target === 'maximize') {
-    if (target && target > 0) fit = Math.max(0, Math.min(1, metric / target));
-    else if (max !== null && max > 0) fit = Math.max(0, Math.min(1, metric / max));
-    else fit = Math.max(0, Math.min(1, (metric + 20) / 120));
-  } else if (objective.target === 'minimize') {
-    if (objective.attribute.toLowerCase().includes('cost')) {
-      fit = Math.max(0, Math.min(1, (-metric) / 20));
-    } else if (target && target > 0) {
-      fit = Math.max(0, Math.min(1, target / Math.max(metric, 1e-6)));
-    } else if (min !== null && min >= 0) {
-      fit = Math.max(0, Math.min(1, min / Math.max(metric, 1e-6)));
-    } else {
-      fit = Math.max(0, Math.min(1, 1 - metric / 100));
-    }
-  }
-
-  // Apply a soft penalty when metric falls outside objective min/max bounds.
-  // This lets min/max sliders act like objective-side constraints during ranking.
-  if (min !== null || max !== null) {
-    let boundPenalty = 0;
-    if (min !== null && metric < min) boundPenalty += min - metric;
-    if (max !== null && metric > max) boundPenalty += metric - max;
-
-    if (boundPenalty > 0) {
-      const scale = (() => {
-        if (min !== null && max !== null && max > min) return max - min;
-        if (target !== null && Math.abs(target) > 1e-6) return Math.abs(target);
-        return 20;
-      })();
-      const multiplier = Math.max(0, 1 - boundPenalty / Math.max(1e-6, scale));
-      fit *= multiplier;
-    }
-  }
-
-  return fit * Math.max(1, weight);
-}
-
-function constraintPenalty(recipe: LiveRecipe, constraints: WorkspaceConstraint[]): number {
-  const metricFor = (name: string): number | null => {
-    const key = name.toLowerCase().trim();
-    if (key.includes('zinc oxide')) return recipe.zno;
-    if (key.includes('titanium dioxide')) return recipe.tio2;
-    if (key.includes('avobenzone')) return recipe.avobenzone;
-    if (key.includes('octocrylene')) return recipe.octocrylene;
-    if (key.includes('total uv filters')) return recipe.zno + recipe.tio2 + recipe.avobenzone + recipe.octocrylene;
-    if (key === 'ph') return 6.1;
-    return null;
-  };
-
-  return constraints.reduce((sum, c) => {
-    const metric = metricFor(c.ingredient);
-    if (metric === null) return sum;
-
-    let delta = 0;
-    if (typeof c.min === 'number' && metric < c.min) delta += c.min - metric;
-    if (typeof c.max === 'number' && metric > c.max) delta += metric - c.max;
-    if (delta <= 0) return sum;
-
-    const typeWeight = c.type === 'regulatory' ? 3.2 : c.type === 'process' ? 2.0 : 1.2;
-    return sum + delta * typeWeight;
-  }, 0);
-}
-
-function buildLiveStage5Result(
-  objectives: Objective[],
-  objectiveWeights: Record<string, number>,
-  constraints: WorkspaceConstraint[],
-  hiddenRecipeIds: Set<string>,
-  starredRecipeIds: Set<string>,
-): { chartData: any[]; tableRows: Record<string, any>[] } {
-  const rand = seededRand(42);
-  const recipes: LiveRecipe[] = [];
-
-  for (let i = 0; i < 120; i += 1) {
-    const zno = +(11 + rand() * 6.5).toFixed(1);
-    const tio2 = +(6.5 + rand() * 4.5).toFixed(1);
-    const avobenzone = +(2.1 + rand() * 1.5).toFixed(1);
-    const octocrylene = +(1.1 + rand() * 2.5).toFixed(1);
-    const cyclopentasiloxane = +(8 + rand() * 8).toFixed(1);
-    const dimethicone = +(2 + rand() * 5).toFixed(1);
-    const uvTotal = zno + tio2 + avobenzone + octocrylene;
-    const aqua = +(100 - (uvTotal + cyclopentasiloxane + dimethicone)).toFixed(1);
-
-    const recipe: LiveRecipe = {
-      id: `R-${String(100 + i * 7).slice(-3)}`,
-      zno,
-      tio2,
-      avobenzone,
-      octocrylene,
-      cyclopentasiloxane,
-      dimethicone,
-      aqua,
-      spf: +(10 + zno * 1.85 + tio2 * 1.45 + avobenzone * 2.9 + octocrylene * 0.95 - Math.max(0, aqua - 58) * 0.18 + (rand() - 0.5) * 0.8).toFixed(1),
-      wr: +(68 + zno * 1.05 + tio2 * 0.72 + octocrylene * 0.58 + cyclopentasiloxane * 0.2 + dimethicone * 0.13 + (rand() - 0.5) * 1.2).toFixed(1),
-      stability: +(81 + tio2 * 0.92 + zno * 0.35 + octocrylene * 0.32 - Math.max(0, avobenzone - 3.0) * 1.8 + (rand() - 0.5) * 0.8).toFixed(1),
-      score: 0,
-      costDelta: +(-3 - zno * 0.36 - tio2 * 0.18 - avobenzone * 0.22 + cyclopentasiloxane * 0.05 + (rand() - 0.5) * 1.4).toFixed(1),
-      isLead: false,
-      isTop3: false,
-      color: '#94a3b8',
-    };
-
-    const objectiveScore = objectives.reduce((sum, obj) => {
-      const weight = objectiveWeights[obj.id] ?? (obj.priority === 'high' ? 85 : obj.priority === 'medium' ? 60 : 40);
-      return sum + objectiveFitScore(recipe, obj, weight);
-    }, 0);
-    recipe.score = +(objectiveScore - constraintPenalty(recipe, constraints)).toFixed(1);
-    recipes.push(recipe);
-  }
-
-  recipes.sort((a, b) => b.score - a.score);
-
-  const rankColor = (index: number) => {
-    const hue = Math.round((index * 137.5 + rand() * 47) % 360);
-    const saturation = 64 + Math.round(rand() * 18);
-    const lightness = 44 + Math.round(rand() * 8);
-    return `hsl(${hue} ${saturation}% ${lightness}%)`;
-  };
-
-  const rankedRecipes = recipes.map((r, idx) => ({
-    ...r,
-    isTop3: idx < 3,
-    isLead: idx === 0,
-    color: rankColor(idx),
-  }));
-  const top25 = rankedRecipes.slice(0, 25);
-
-  const baseline: LiveRecipe = {
-    id: 'Baseline',
-    zno: 10.5,
-    tio2: 5.5,
-    avobenzone: 2.0,
-    octocrylene: 1.6,
-    cyclopentasiloxane: 10.0,
-    dimethicone: 3.2,
-    aqua: 67.2,
-    spf: 35.5,
-    wr: 82.0,
-    stability: 88.0,
-    score: 0,
-    costDelta: 0,
-    isLead: false,
-    isTop3: false,
-    color: '#94a3b8',
-  };
-
-  const liveRecipeSeries = [
-    baseline,
-    ...rankedRecipes,
-  ];
-
-  const historicalSeries = Array.from({ length: 75 }, (_, idx) => {
-    const hRand = seededRand(900 + idx);
-    const zno = +(8 + hRand() * 7).toFixed(1);
-    const tio2 = +(4.5 + hRand() * 5).toFixed(1);
-    const avobenzone = +(1.5 + hRand() * 2.2).toFixed(1);
-    const octocrylene = +(0.9 + hRand() * 2.6).toFixed(1);
-    const cyclopentasiloxane = +(7 + hRand() * 9).toFixed(1);
-    const dimethicone = +(1.6 + hRand() * 4.8).toFixed(1);
-    const uvTotal = zno + tio2 + avobenzone + octocrylene;
-    const aqua = +(100 - (uvTotal + cyclopentasiloxane + dimethicone)).toFixed(1);
-
-    return {
-      id: `H-${String(idx + 1).padStart(3, '0')}`,
-      zno,
-      tio2,
-      avobenzone,
-      octocrylene,
-      cyclopentasiloxane,
-      dimethicone,
-      aqua,
-      spf: +(9 + zno * 1.55 + tio2 * 1.28 + avobenzone * 2.35 + octocrylene * 0.84 + (hRand() - 0.5) * 1.4).toFixed(1),
-      wr: +(64 + zno * 0.88 + tio2 * 0.62 + octocrylene * 0.55 + cyclopentasiloxane * 0.24 + (hRand() - 0.5) * 1.5).toFixed(1),
-      stability: +(79 + tio2 * 0.82 + zno * 0.27 + octocrylene * 0.29 - Math.max(0, avobenzone - 2.8) * 1.6 + (hRand() - 0.5) * 1.2).toFixed(1),
-      score: 0,
-      costDelta: +(-2.5 - zno * 0.31 - tio2 * 0.14 - avobenzone * 0.16 + cyclopentasiloxane * 0.07 + (hRand() - 0.5) * 1.8).toFixed(1),
-      isLead: false,
-      isTop3: false,
-      color: '#9ca3af',
-      isHistorical: true,
-    };
-  });
-
-  const chartData = [...liveRecipeSeries, ...historicalSeries].map((r) => ({
-    ...r,
-    isHistorical: Boolean((r as any).isHistorical),
-    isStarred: starredRecipeIds.has(r.id),
-  }));
-
-  const tableRows = top25.map((r) => ({
-    starred: starredRecipeIds.has(r.id),
-    visible: !hiddenRecipeIds.has(r.id),
-    plotColor: r.color,
-    recipe: r.id,
-    zno: r.zno,
-    tio2: r.tio2,
-    avobenzone: r.avobenzone,
-    octocrylene: r.octocrylene,
-    cyclopentasiloxane: r.cyclopentasiloxane,
-    dimethicone: r.dimethicone,
-    aqua: r.aqua,
-    status: '✓ Pass',
-  }));
-
-  return { chartData, tableRows };
-}
-
 /* ── Page component ─────────────────────────────────────────── */
 
 export function WorkspacePage() {
@@ -713,10 +439,6 @@ export function WorkspacePage() {
   const [objectives,       setObjectives]        = useState<Objective[]>(
     OBJECTIVES_BY_STAGE[2] || OBJECTIVES_BASE.map((o) => ({ ...o, status: 'active' as const, progress: 15 }))
   );
-  const [objectiveWeights, setObjectiveWeights] = useState<Record<string, number>>({});
-  const [constraints, setConstraints] = useState<WorkspaceConstraint[]>(DEFAULT_LIVE_CONSTRAINTS);
-  const [hiddenLiveRecipeIds, setHiddenLiveRecipeIds] = useState<string[]>([]);
-  const [starredLiveRecipeIds, setStarredLiveRecipeIds] = useState<string[]>([]);
 
   // Multi-panel canvas state
   const [columnCount,  setColumnCount]  = useState<ColumnCount>(2);
@@ -805,43 +527,8 @@ export function WorkspacePage() {
     setCanvasCards([]);
   }, []);
 
-  const liveStage5 = useMemo(() => {
-    return buildLiveStage5Result(
-      objectives,
-      objectiveWeights,
-      constraints,
-      new Set(hiddenLiveRecipeIds),
-      new Set(starredLiveRecipeIds),
-    );
-  }, [objectives, objectiveWeights, constraints, hiddenLiveRecipeIds, starredLiveRecipeIds]);
-
-  const stageResults = useMemo<Record<number, { chart: ChartConfig; table: TableConfig }>>(() => {
-    return {
-      ...STAGE_RESULTS,
-      5: {
-        chart: {
-          ...STAGE_RESULTS[5].chart,
-          subtitle: 'Live optimization with historical/training overlay',
-          data: liveStage5.chartData,
-        },
-        table: {
-          ...STAGE_RESULTS[5].table,
-          subtitle: 'Top 25 live candidates (re-ranked as objectives/constraints change)',
-          columns: [
-            { key: 'starred', label: 'Star', width: '48px', align: 'center' as const },
-            { key: 'visible', label: 'View', width: '48px', align: 'center' as const },
-            { key: 'plotColor', label: 'Plot', width: '48px', align: 'center' as const },
-            ...STAGE_RESULTS[5].table.columns,
-          ],
-          pinnedValue: liveStage5.tableRows[0]?.recipe ?? 'R-047',
-          rows: liveStage5.tableRows,
-        },
-      },
-    };
-  }, [liveStage5]);
-
-  const currentResults = (hasRun || stageResults[demoStage]) ? (stageResults[demoStage] ?? null) : null;
-  const effectiveHasRun = hasRun || !!stageResults[demoStage];
+  const currentResults = (hasRun || STAGE_RESULTS[demoStage]) ? (STAGE_RESULTS[demoStage] ?? null) : null;
+  const effectiveHasRun = hasRun || !!STAGE_RESULTS[demoStage];
 
   useEffect(() => {
     setRecipesGenerated(demoStage >= 5);
@@ -915,10 +602,6 @@ export function WorkspacePage() {
     setInsights(INITIAL_INSIGHTS);
     setModelMetrics(null);
     setObjectives(OBJECTIVES_BY_STAGE[2] || OBJECTIVES_BASE.map((o) => ({ ...o, status: 'active' as const, progress: 15 })));
-    setObjectiveWeights({});
-    setConstraints(DEFAULT_LIVE_CONSTRAINTS);
-    setHiddenLiveRecipeIds([]);
-    setStarredLiveRecipeIds([]);
     setRightTab('chat');
     setCustomCharts({});
     setChartBuilderState({ open: false, panelIdx: 0, editingId: null });
@@ -1134,22 +817,10 @@ export function WorkspacePage() {
         <div className="flex-1 overflow-hidden min-w-0 flex flex-col">
           <WorkspaceCanvas
             columnCount={columnCount}
-            stageResults={stageResults}
+            stageResults={STAGE_RESULTS}
             currentStage={demoStage}
             isLoading={isLoading}
             hasRun={effectiveHasRun}
-            hiddenRecipeIds={hiddenLiveRecipeIds}
-            onToggleRecipeVisibility={(recipeId) => {
-              setHiddenLiveRecipeIds((prev) =>
-                prev.includes(recipeId) ? prev.filter((id) => id !== recipeId) : [...prev, recipeId]
-              );
-            }}
-            starredRecipeIds={starredLiveRecipeIds}
-            onToggleRecipeStar={(recipeId) => {
-              setStarredLiveRecipeIds((prev) =>
-                prev.includes(recipeId) ? prev.filter((id) => id !== recipeId) : [...prev, recipeId]
-              );
-            }}
             panelViews={panelViews}
             onChangePanelView={handleChangePanelView}
             onAddPanel={handleAddPanel}
@@ -1173,15 +844,6 @@ export function WorkspacePage() {
               isLocked={demoStage >= 1}
               insights={insights}
               modelMetrics={modelMetrics}
-              objectiveWeights={objectiveWeights}
-              onObjectivesChange={(nextObjectives, nextWeights) => {
-                setObjectives(nextObjectives);
-                setObjectiveWeights(nextWeights);
-              }}
-              onWeightChange={(id, val) => {
-                setObjectiveWeights((prev) => ({ ...prev, [id]: val }));
-              }}
-              onConstraintsChange={setConstraints}
             />
           </div>
         )}
@@ -1194,7 +856,7 @@ export function WorkspacePage() {
         onSave={handleSaveCustomChart}
         currentStage={demoStage}
         hasRun={hasRun}
-        stageResults={stageResults}
+        stageResults={STAGE_RESULTS}
         editingConfig={chartBuilderState.editingId ? customCharts[chartBuilderState.editingId] : null}
       />
 
@@ -1219,7 +881,7 @@ export function WorkspacePage() {
         projectName={projectName}
         currentStage={demoStage}
         hasRun={hasRun}
-        stageResults={stageResults}
+        stageResults={STAGE_RESULTS}
         customCharts={customCharts}
         onSaveReport={saveReport}
         initialReport={editingReport}

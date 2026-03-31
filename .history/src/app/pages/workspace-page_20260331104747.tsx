@@ -495,24 +495,6 @@ function objectiveFitScore(recipe: LiveRecipe, objective: Objective, weight: num
     }
   }
 
-  // Apply a soft penalty when metric falls outside objective min/max bounds.
-  // This lets min/max sliders act like objective-side constraints during ranking.
-  if (min !== null || max !== null) {
-    let boundPenalty = 0;
-    if (min !== null && metric < min) boundPenalty += min - metric;
-    if (max !== null && metric > max) boundPenalty += metric - max;
-
-    if (boundPenalty > 0) {
-      const scale = (() => {
-        if (min !== null && max !== null && max > min) return max - min;
-        if (target !== null && Math.abs(target) > 1e-6) return Math.abs(target);
-        return 20;
-      })();
-      const multiplier = Math.max(0, 1 - boundPenalty / Math.max(1e-6, scale));
-      fit *= multiplier;
-    }
-  }
-
   return fit * Math.max(1, weight);
 }
 

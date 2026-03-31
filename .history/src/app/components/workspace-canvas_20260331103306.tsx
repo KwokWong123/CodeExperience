@@ -50,8 +50,6 @@ export interface WorkspaceCanvasProps {
   liveActive:          boolean;
   hiddenRecipeIds?:    string[];
   onToggleRecipeVisibility?: (recipeId: string) => void;
-  starredRecipeIds?:   string[];
-  onToggleRecipeStar?: (recipeId: string) => void;
   panelViews:          PanelView[];
   onChangePanelView:   (idx: number, view: PanelView) => void;
   onAddPanel:          () => void;
@@ -339,7 +337,6 @@ function resolvePanel(
 function PanelFrame({
   view, idx, currentStage, isLoading, hasRun, liveActive, stageResults,
   hiddenRecipeIds, onToggleRecipeVisibility,
-  starredRecipeIds, onToggleRecipeStar,
   onChangeView, canRemove, onRemove,
   canvasCards, onRemoveCard, onUpdateCard, onClearAll,
   libraryArtifacts, onAddToCanvas,
@@ -350,8 +347,6 @@ function PanelFrame({
   stageResults: Record<number, StageResult>;
   hiddenRecipeIds?: string[];
   onToggleRecipeVisibility?: (recipeId: string) => void;
-  starredRecipeIds?: string[];
-  onToggleRecipeStar?: (recipeId: string) => void;
   onChangeView: (v: PanelView) => void;
   canRemove: boolean;
   onRemove: () => void;
@@ -502,8 +497,6 @@ function PanelFrame({
             stage={panelProps!.stage}
             hiddenRecipeIds={hiddenRecipeIds}
             onToggleRecipeVisibility={onToggleRecipeVisibility}
-            starredRecipeIds={starredRecipeIds}
-            onToggleRecipeStar={onToggleRecipeStar}
             canvasCards={canvasCards}
             onRemoveCard={onRemoveCard}
             onUpdateCard={onUpdateCard}
@@ -538,7 +531,6 @@ function AddPanelCell({ onClick }: { onClick: () => void }) {
 export function WorkspaceCanvas({
   columnCount, stageResults, currentStage, isLoading, hasRun, liveActive,
   hiddenRecipeIds, onToggleRecipeVisibility,
-  starredRecipeIds, onToggleRecipeStar,
   panelViews, onChangePanelView, onAddPanel, onRemovePanel,
   canvasCards, onRemoveCard, onUpdateCard, onClearAll,
   libraryArtifacts, onAddToCanvas,
@@ -594,8 +586,6 @@ export function WorkspaceCanvas({
                 stageResults={stageResults}
                 hiddenRecipeIds={hiddenRecipeIds}
                 onToggleRecipeVisibility={onToggleRecipeVisibility}
-                starredRecipeIds={starredRecipeIds}
-                onToggleRecipeStar={onToggleRecipeStar}
                 onChangeView={v => onChangePanelView(idx, v)}
                 canRemove={canRemove}
                 onRemove={() => onRemovePanel(idx)}

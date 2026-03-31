@@ -18,8 +18,6 @@ export interface Objective {
   attribute: string;
   target: 'maximize' | 'minimize' | 'range';
   value?: number | string;
-  min?: number;
-  max?: number;
   unit?: string;
   priority: 'high' | 'medium' | 'low';
   status: 'active' | 'achieved' | 'pending' | 'at-risk';
@@ -609,49 +607,34 @@ const PRIORITY_DEFAULT_WEIGHTS: Record<string, number> = {
   low: 30,
 };
 
-const OBJECTIVE_SLIDER_RANGES: Record<string, { min: number; max: number; step: number }> = {
-  spf: { min: 0, max: 100, step: 1 },
-  water: { min: 0, max: 100, step: 1 },
-  resistance: { min: 0, max: 100, step: 1 },
-  stability: { min: 0, max: 100, step: 1 },
-  cost: { min: -20, max: 20, step: 0.5 },
-};
-const DEFAULT_OBJECTIVE_SLIDER_RANGE = { min: 0, max: 100, step: 1 };
-
-function getObjectiveSliderRange(attribute: string) {
-  const key = attribute.toLowerCase();
-  if (key.includes('spf')) return OBJECTIVE_SLIDER_RANGES.spf;
-  if (key.includes('water') || key.includes('resistance')) return OBJECTIVE_SLIDER_RANGES.water;
-  if (key.includes('stability')) return OBJECTIVE_SLIDER_RANGES.stability;
-  if (key.includes('cost')) return OBJECTIVE_SLIDER_RANGES.cost;
-  return DEFAULT_OBJECTIVE_SLIDER_RANGE;
-}
-
 function ObjectiveSlider({
   obj,
   weight,
   onWeightChange,
   onTargetToggle,
-  onObjectiveChange,
+  onValueChange,
 }: {
   obj: Objective;
   weight: number;
   onWeightChange: (id: string, val: number) => void;
   onTargetToggle: (id: string) => void;
-  onObjectiveChange: (id: string, patch: Partial<Objective>) => void;
+  onValueChange: (id: string, val: string) => void;
 }) {
   const status = STATUS_CONFIG[obj.status];
-  const range = getObjectiveSliderRange(obj.attribute);
-  const span = range.max - range.min;
-  const fallbackTarget = obj.target === 'minimize' ? range.min + span * 0.2 : range.min + span * 0.8;
-  const targetVal = typeof obj.value === 'number' ? obj.value : fallbackTarget;
-  const minVal = typeof obj.min === 'number' ? obj.min : range.min;
-  const maxVal = typeof obj.max === 'number' ? obj.max : range.max;
-  const fmt = (n: number) => (range.step < 1 ? n.toFixed(1) : String(Math.round(n)));
+  const [editingValue, setEditingValue] = useState(false);
+  const [valueBuffer, setValueBuffer] = useState(String(obj.value ?? ''));
+  const valueInputRef = useRef<HTMLInputElement>(null);
 
-  const targetPct = Math.max(0, Math.min(100, ((targetVal - range.min) / span) * 100));
-  const minPct = Math.max(0, Math.min(100, ((minVal - range.min) / span) * 100));
-  const maxPct = Math.max(0, Math.min(100, ((maxVal - range.min) / span) * 100));
+  const commitValue = () => {
+    onValueChange(obj.id, valueBuffer.trim());
+    setEditingValue(false);
+  };
+
+  const startEditValue = () => {
+    setValueBuffer(String(obj.value ?? ''));
+    setEditingValue(true);
+    setTimeout(() => valueInputRef.current?.select(), 0);
+  };
 
   return (
     <div
@@ -675,8 +658,8 @@ function ObjectiveSlider({
         </span>
       </div>
 
-      {/* Direction toggle */}
-      <div className="flex items-center gap-1.5 mb-2">
+      {/* Direction toggle + target value row */}
+      <div className="flex items-center gap-1.5 mb-2.5">
         {/* Maximize / Minimize toggle */}
         <button
           onClick={() => onTargetToggle(obj.id)}
@@ -694,78 +677,44 @@ function ObjectiveSlider({
           )}
           {obj.target === 'maximize' ? 'Max' : 'Min'}
         </button>
-      </div>
 
-      {/* Objective bounds sliders */}
-      <div className="space-y-2.5 mb-2.5">
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[8px] text-gray-400 uppercase tracking-wider font-semibold">Target</span>
-            <span className="text-[10px] font-bold tabular-nums text-[#3F98FF]">{fmt(targetVal)}{obj.unit ? ` ${obj.unit}` : ''}</span>
-          </div>
-          <input
-            type="range"
-            min={Math.max(minVal, range.min)}
-            max={Math.min(maxVal, range.max)}
-            step={range.step}
-            value={targetVal}
-            onChange={(e) => {
-              const nextTarget = parseFloat(e.target.value);
-              const nextMin = Math.min(minVal, nextTarget);
-              const nextMax = Math.max(maxVal, nextTarget);
-              onObjectiveChange(obj.id, { value: nextTarget, min: nextMin, max: nextMax });
-            }}
-            className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-            style={{
-              background: `linear-gradient(to right, #3F98FF ${targetPct}%, #e5e7eb ${targetPct}%)`,
-              accentColor: '#3F98FF',
-            }}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[8px] text-gray-400 uppercase tracking-wider font-semibold">Min</span>
-            <span className="text-[10px] font-bold tabular-nums text-[#3F98FF]">{fmt(minVal)}{obj.unit ? ` ${obj.unit}` : ''}</span>
-          </div>
-          <input
-            type="range"
-            min={range.min}
-            max={Math.min(targetVal, maxVal)}
-            step={range.step}
-            value={minVal}
-            onChange={(e) => onObjectiveChange(obj.id, { min: parseFloat(e.target.value) })}
-            className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-            style={{
-              background: `linear-gradient(to right, #7c3aed ${minPct}%, #e5e7eb ${minPct}%)`,
-              accentColor: '#7c3aed',
-            }}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[8px] text-gray-400 uppercase tracking-wider font-semibold">Max</span>
-            <span className="text-[10px] font-bold tabular-nums text-[#3F98FF]">{fmt(maxVal)}{obj.unit ? ` ${obj.unit}` : ''}</span>
-          </div>
-          <input
-            type="range"
-            min={Math.max(targetVal, minVal)}
-            max={range.max}
-            step={range.step}
-            value={maxVal}
-            onChange={(e) => onObjectiveChange(obj.id, { max: parseFloat(e.target.value) })}
-            className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-            style={{
-              background: `linear-gradient(to right, #059669 ${maxPct}%, #e5e7eb ${maxPct}%)`,
-              accentColor: '#059669',
-            }}
-          />
-        </div>
-
-        <div className="flex justify-between mt-0.5">
-          <span className="text-[7px] text-gray-300">{fmt(range.min)}</span>
-          <span className="text-[7px] text-gray-300">{fmt(range.max)}{obj.unit ? ` ${obj.unit}` : ''}</span>
+        {/* Target value — click to edit */}
+        <div className="flex-1 min-w-0">
+          {editingValue ? (
+            <div className="flex items-center gap-1">
+              <input
+                ref={valueInputRef}
+                value={valueBuffer}
+                autoFocus
+                onChange={(e) => setValueBuffer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitValue();
+                  if (e.key === 'Escape') setEditingValue(false);
+                }}
+                onBlur={commitValue}
+                className="flex-1 min-w-0 text-[10px] text-gray-800 bg-white border border-[#3F98FF] rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#3F98FF]/30"
+                placeholder="e.g. 50 or 95%"
+              />
+              <button
+                onMouseDown={(e) => { e.preventDefault(); commitValue(); }}
+                className="shrink-0 w-4 h-4 flex items-center justify-center text-[#3F98FF] hover:bg-blue-50 rounded"
+              >
+                <Check className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={startEditValue}
+              title="Click to edit target"
+              className="group w-full flex items-center gap-1 px-1.5 py-1 rounded border border-dashed border-gray-200 hover:border-[#3F98FF]/50 hover:bg-[#3F98FF]/5 transition-colors"
+            >
+              <span className="text-[9px] text-gray-400 shrink-0">Target:</span>
+              <span className="text-[9px] font-semibold text-gray-700 flex-1 truncate">
+                {obj.value != null && obj.value !== '' ? `${obj.value}${obj.unit ? ` ${obj.unit}` : ''}` : '—'}
+              </span>
+              <Edit2 className="w-2.5 h-2.5 text-gray-300 group-hover:text-[#3F98FF] shrink-0 transition-colors" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1173,6 +1122,9 @@ export function WorkspaceConfigPanel({
   const objectiveWeightsRef = useRef<Record<string, number>>({});
   useEffect(() => { objectiveWeightsRef.current = objectiveWeights; }, [objectiveWeights]);
 
+  // Debounce ref for objectives callback (kept for handleValueChange text input)
+  const objCallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Use controlled weights from parent if provided, otherwise internal state
   const effectiveWeights = controlledWeights ?? objectiveWeights;
 
@@ -1197,32 +1149,12 @@ export function WorkspaceConfigPanel({
     });
   };
 
-  const handleObjectiveChange = (id: string, patch: Partial<Objective>) => {
+  const handleValueChange = (id: string, val: string) => {
     setLocalObjectives((prev) => {
-      const next = prev.map((o) => {
-        if (o.id !== id) return o;
-        const merged = { ...o, ...patch };
-        const min = typeof merged.min === 'number' ? merged.min : undefined;
-        const max = typeof merged.max === 'number' ? merged.max : undefined;
-        let value = typeof merged.value === 'number' ? merged.value : merged.value;
-
-        if (typeof value === 'number') {
-          if (typeof min === 'number' && value < min) value = min;
-          if (typeof max === 'number' && value > max) value = max;
-        }
-
-        const normalizedMin = typeof min === 'number' && typeof max === 'number' ? Math.min(min, max) : min;
-        const normalizedMax = typeof min === 'number' && typeof max === 'number' ? Math.max(min, max) : max;
-
-        return {
-          ...merged,
-          min: normalizedMin,
-          max: normalizedMax,
-          value,
-        };
-      });
+      const next = prev.map((o) => (o.id === id ? { ...o, value: val } : o));
       localObjectivesRef.current = next;
-      onObjectivesChange?.(next, objectiveWeightsRef.current);
+      if (objCallbackTimer.current) clearTimeout(objCallbackTimer.current);
+      objCallbackTimer.current = setTimeout(() => onObjectivesChange?.(next, objectiveWeightsRef.current), 80);
       return next;
     });
   };
@@ -1585,7 +1517,7 @@ export function WorkspaceConfigPanel({
                   weight={effectiveWeights[obj.id] ?? PRIORITY_DEFAULT_WEIGHTS[obj.priority] ?? 50}
                   onWeightChange={handleWeightChange}
                   onTargetToggle={handleTargetToggle}
-                  onObjectiveChange={handleObjectiveChange}
+                  onValueChange={handleValueChange}
                 />
               ))}
             </div>

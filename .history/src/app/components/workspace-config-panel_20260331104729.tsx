@@ -1173,6 +1173,9 @@ export function WorkspaceConfigPanel({
   const objectiveWeightsRef = useRef<Record<string, number>>({});
   useEffect(() => { objectiveWeightsRef.current = objectiveWeights; }, [objectiveWeights]);
 
+  // Debounce ref for objectives callback (kept for handleValueChange text input)
+  const objCallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Use controlled weights from parent if provided, otherwise internal state
   const effectiveWeights = controlledWeights ?? objectiveWeights;
 
@@ -1197,32 +1200,12 @@ export function WorkspaceConfigPanel({
     });
   };
 
-  const handleObjectiveChange = (id: string, patch: Partial<Objective>) => {
+  const handleValueChange = (id: string, val: string) => {
     setLocalObjectives((prev) => {
-      const next = prev.map((o) => {
-        if (o.id !== id) return o;
-        const merged = { ...o, ...patch };
-        const min = typeof merged.min === 'number' ? merged.min : undefined;
-        const max = typeof merged.max === 'number' ? merged.max : undefined;
-        let value = typeof merged.value === 'number' ? merged.value : merged.value;
-
-        if (typeof value === 'number') {
-          if (typeof min === 'number' && value < min) value = min;
-          if (typeof max === 'number' && value > max) value = max;
-        }
-
-        const normalizedMin = typeof min === 'number' && typeof max === 'number' ? Math.min(min, max) : min;
-        const normalizedMax = typeof min === 'number' && typeof max === 'number' ? Math.max(min, max) : max;
-
-        return {
-          ...merged,
-          min: normalizedMin,
-          max: normalizedMax,
-          value,
-        };
-      });
+      const next = prev.map((o) => (o.id === id ? { ...o, value: val } : o));
       localObjectivesRef.current = next;
-      onObjectivesChange?.(next, objectiveWeightsRef.current);
+      if (objCallbackTimer.current) clearTimeout(objCallbackTimer.current);
+      objCallbackTimer.current = setTimeout(() => onObjectivesChange?.(next, objectiveWeightsRef.current), 80);
       return next;
     });
   };
@@ -1585,7 +1568,7 @@ export function WorkspaceConfigPanel({
                   weight={effectiveWeights[obj.id] ?? PRIORITY_DEFAULT_WEIGHTS[obj.priority] ?? 50}
                   onWeightChange={handleWeightChange}
                   onTargetToggle={handleTargetToggle}
-                  onObjectiveChange={handleObjectiveChange}
+                  onValueChange={handleValueChange}
                 />
               ))}
             </div>
