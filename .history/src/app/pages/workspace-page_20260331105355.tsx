@@ -450,40 +450,6 @@ function seededRand(seed: number) {
   };
 }
 
-function hashLiveInputs(
-  objectives: Objective[],
-  objectiveWeights: Record<string, number>,
-  constraints: WorkspaceConstraint[],
-): number {
-  const objectivePart = objectives
-    .slice()
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map((o) => [
-      o.id,
-      o.attribute,
-      o.target,
-      typeof o.value === 'number' ? o.value : String(o.value ?? ''),
-      o.min ?? '',
-      o.max ?? '',
-      objectiveWeights[o.id] ?? '',
-    ].join('|'))
-    .join('||');
-
-  const constraintPart = constraints
-    .slice()
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map((c) => [c.id, c.ingredient, c.min ?? '', c.max ?? '', c.unit, c.type].join('|'))
-    .join('||');
-
-  const raw = `${objectivePart}###${constraintPart}`;
-  let hash = 2166136261;
-  for (let i = 0; i < raw.length; i += 1) {
-    hash ^= raw.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return Math.abs(hash % 2147483646) + 1;
-}
-
 function parseTargetNumber(value?: number | string): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value !== 'string') return null;
@@ -585,8 +551,7 @@ function buildLiveStage5Result(
   hiddenRecipeIds: Set<string>,
   starredRecipeIds: Set<string>,
 ): { chartData: any[]; tableRows: Record<string, any>[] } {
-  const liveSeed = hashLiveInputs(objectives, objectiveWeights, constraints);
-  const rand = seededRand(liveSeed);
+  const rand = seededRand(42);
   const recipes: LiveRecipe[] = [];
 
   for (let i = 0; i < 120; i += 1) {

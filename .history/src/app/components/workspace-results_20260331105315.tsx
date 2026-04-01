@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────── */
+export type ObjectiveAxisBounds = Partial<Record<AxisKey, { target?: number; min?: number; max?: number }>>;
 
 export interface ChartConfig {
   title: string;
@@ -74,7 +75,6 @@ const AXIS_OPTIONS = [
 ] as const;
 
 type AxisKey = typeof AXIS_OPTIONS[number]['key'];
-export type ObjectiveAxisBounds = Partial<Record<AxisKey, { target?: number; min?: number; max?: number }>>;
 
 /* ── Scatter data (stage 5) ─────────────────────────────────── */
 
@@ -163,7 +163,7 @@ function AxisSelect({ label, value, onChange, exclude }: { label: string; value:
 
 /* ── Stage-5 scatter plot (chart-only, no formulation tab) ──── */
 
-function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [], objectiveBounds = {} }: { recipes?: any[]; hiddenRecipeIds?: string[]; starredRecipeIds?: string[]; objectiveBounds?: ObjectiveAxisBounds }) {
+function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [] }: { recipes?: any[]; hiddenRecipeIds?: string[]; starredRecipeIds?: string[] }) {
   const [xKey, setXKey] = useState<AxisKey>('spf');
   const [yKey, setYKey] = useState<AxisKey>('wr');
   const [selectedRecipe, setSelectedRecipe] = useState<string>('R-047');
@@ -238,27 +238,6 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
   };
 
   const LEGEND_ITEMS = recipeData.filter((r: any) => r.isTop3 || r.id === 'Baseline');
-  const axisRefLines = (axis: AxisKey, fallback: (typeof AXIS_OPTIONS)[number]['refLine']) => {
-    const bounds = objectiveBounds[axis];
-    const lines: Array<{ value: number; color: string; label: string; dash?: string }> = [];
-
-    if (bounds) {
-      if (typeof bounds.min === 'number') lines.push({ value: bounds.min, color: '#7c3aed', label: 'Obj Min', dash: '4 3' });
-      if (typeof bounds.max === 'number') lines.push({ value: bounds.max, color: '#059669', label: 'Obj Max', dash: '4 3' });
-      if (!lines.length && typeof bounds.target === 'number') {
-        lines.push({ value: bounds.target, color: '#3F98FF', label: 'Obj Target', dash: '3 2' });
-      }
-    }
-
-    if (!lines.length && fallback) {
-      lines.push({ value: fallback.val, color: fallback.color, label: fallback.label, dash: '4 3' });
-    }
-
-    return lines;
-  };
-
-  const xRefLines = axisRefLines(xKey, xOpt.refLine);
-  const yRefLines = axisRefLines(yKey, yOpt.refLine);
 
   return (
     <div className="flex flex-col h-full">
@@ -298,12 +277,8 @@ function RecipeScatterPlot({ recipes, hiddenRecipeIds = [], starredRecipeIds = [
             </YAxis>
             <ZAxis type="number" dataKey="stability" range={[40, 200]} />
             <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-            {xRefLines.map((line) => (
-              <ReferenceLine key={`x-${line.label}-${line.value}`} x={line.value} stroke={line.color} strokeDasharray={line.dash ?? '4 3'} label={{ value: line.label, fill: line.color, fontSize: 10, position: 'top' }} />
-            ))}
-            {yRefLines.map((line) => (
-              <ReferenceLine key={`y-${line.label}-${line.value}`} y={line.value} stroke={line.color} strokeDasharray={line.dash ?? '4 3'} label={{ value: line.label, fill: line.color, fontSize: 10, position: 'insideRight' }} />
-            ))}
+            {xOpt.refLine && <ReferenceLine x={xOpt.refLine.val} stroke={xOpt.refLine.color} strokeDasharray="4 3" label={{ value: xOpt.refLine.label, fill: xOpt.refLine.color, fontSize: 10, position: 'top' }} />}
+            {yOpt.refLine && <ReferenceLine y={yOpt.refLine.val} stroke={yOpt.refLine.color} strokeDasharray="4 3" label={{ value: yOpt.refLine.label, fill: yOpt.refLine.color, fontSize: 10, position: 'insideRight' }} />}
             <Scatter data={historicalData} shape={<HistoricalDot />} name="Historical" isAnimationActive={false} />
             <Scatter data={recipeData} shape={<CustomDot />} isAnimationActive={false} />
           </ScatterChart>
@@ -554,7 +529,7 @@ function ResultTable({ config, onToggleRecipeVisibility, onToggleRecipeStar }: {
 
 /* ── Main component ──────────────────────────────────────────── */
 
-export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoading, hasRun, stage, hiddenRecipeIds = [], onToggleRecipeVisibility, starredRecipeIds = [], onToggleRecipeStar, objectiveBounds }: WorkspaceResultsProps) {
+export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoading, hasRun, stage, hiddenRecipeIds = [], onToggleRecipeVisibility, starredRecipeIds = [], onToggleRecipeStar }: WorkspaceResultsProps) {
   if (isLoading) {
     return <div className="h-full flex flex-col bg-[#f8f9fb]"><LoadingState /></div>;
   }
@@ -583,7 +558,7 @@ export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoadin
           <div className="text-[10px] text-gray-400">{chart.subtitle}</div>
         </div>
         <div className="flex-1 min-h-0">
-          <RecipeScatterPlot recipes={chart.data} hiddenRecipeIds={hiddenRecipeIds} starredRecipeIds={starredRecipeIds} objectiveBounds={objectiveBounds} />
+          <RecipeScatterPlot recipes={chart.data} hiddenRecipeIds={hiddenRecipeIds} starredRecipeIds={starredRecipeIds} />
         </div>
       </div>
     );

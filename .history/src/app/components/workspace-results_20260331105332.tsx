@@ -554,7 +554,7 @@ function ResultTable({ config, onToggleRecipeVisibility, onToggleRecipeStar }: {
 
 /* ── Main component ──────────────────────────────────────────── */
 
-export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoading, hasRun, stage, hiddenRecipeIds = [], onToggleRecipeVisibility, starredRecipeIds = [], onToggleRecipeStar, objectiveBounds }: WorkspaceResultsProps) {
+export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoading, hasRun, stage, hiddenRecipeIds = [], onToggleRecipeVisibility, starredRecipeIds = [], onToggleRecipeStar }: WorkspaceResultsProps) {
   if (isLoading) {
     return <div className="h-full flex flex-col bg-[#f8f9fb]"><LoadingState /></div>;
   }
@@ -583,7 +583,7 @@ export function WorkspaceResults({ chart, table, displayMode = 'chart', isLoadin
           <div className="text-[10px] text-gray-400">{chart.subtitle}</div>
         </div>
         <div className="flex-1 min-h-0">
-          <RecipeScatterPlot recipes={chart.data} hiddenRecipeIds={hiddenRecipeIds} starredRecipeIds={starredRecipeIds} objectiveBounds={objectiveBounds} />
+          <RecipeScatterPlot recipes={chart.data} hiddenRecipeIds={hiddenRecipeIds} starredRecipeIds={starredRecipeIds} />
         </div>
       </div>
     );
