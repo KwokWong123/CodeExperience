@@ -614,7 +614,7 @@ export function WorkspacesPage() {
             New Workspace
           </button>
 
-          <NewWorkspaceModal open={showNewModal} onClose={() => setShowNew(false)} onCreate={handleCreate} initialProjectId={projectIdFilter ?? undefined} />
+          <NewWorkspaceModal open={showNewModal} onClose={() => setShowNew(false)} onCreate={handleCreate} />
         </div>
 
         {/* Stats */}

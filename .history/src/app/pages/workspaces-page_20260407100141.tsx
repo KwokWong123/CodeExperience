@@ -172,7 +172,7 @@ const PROJECT_COLORS: Record<string, string> = {
   '5': '#0891b2',
 };
 
-function NewWorkspaceModal({ open, onClose, onCreate, initialProjectId }: {
+function NewWorkspaceModal({ open, onClose, onCreate }: {
   open: boolean;
   onClose: () => void;
   onCreate: (cfg: NewWsConfig) => void;
@@ -614,7 +614,7 @@ export function WorkspacesPage() {
             New Workspace
           </button>
 
-          <NewWorkspaceModal open={showNewModal} onClose={() => setShowNew(false)} onCreate={handleCreate} initialProjectId={projectIdFilter ?? undefined} />
+          <NewWorkspaceModal open={showNewModal} onClose={() => setShowNew(false)} onCreate={handleCreate} />
         </div>
 
         {/* Stats */}

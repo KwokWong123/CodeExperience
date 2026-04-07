@@ -172,11 +172,10 @@ const PROJECT_COLORS: Record<string, string> = {
   '5': '#0891b2',
 };
 
-function NewWorkspaceModal({ open, onClose, onCreate, initialProjectId }: {
+function NewWorkspaceModal({ open, onClose, onCreate }: {
   open: boolean;
   onClose: () => void;
   onCreate: (cfg: NewWsConfig) => void;
-  initialProjectId?: string;
 }) {
   const [wsName, setWsName]       = useState('');
   const [description, setDesc]    = useState('');
@@ -198,13 +197,13 @@ function NewWorkspaceModal({ open, onClose, onCreate, initialProjectId }: {
     if (!open) return;
     setWsName('');
     setDesc('');
-    const first = PROJECTS.find((p) => p.id === initialProjectId) ?? PROJECTS[0];
+    const first = PROJECTS[0];
     setProjectId(first.id);
     const firstModel = MODELS.find(m => m.project === first.name) ?? MODELS[0];
     setModelId(firstModel.id);
     setVersion(firstModel.defaultVersion);
     setColumns(2);
-  }, [open, initialProjectId]);
+  }, [open]);
 
   const handleProjectChange = (pid: string) => {
     setProjectId(pid);
@@ -614,7 +613,7 @@ export function WorkspacesPage() {
             New Workspace
           </button>
 
-          <NewWorkspaceModal open={showNewModal} onClose={() => setShowNew(false)} onCreate={handleCreate} initialProjectId={projectIdFilter ?? undefined} />
+          <NewWorkspaceModal open={showNewModal} onClose={() => setShowNew(false)} onCreate={handleCreate} />
         </div>
 
         {/* Stats */}

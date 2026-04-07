@@ -2158,19 +2158,14 @@ function SideChatPanel({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
         {messages.map((msg) => (
-          msg.role === 'user' ? (
-            <div key={msg.id} className="flex justify-end">
-              <div className="max-w-[82%] px-3 py-2 rounded-2xl rounded-tr-sm text-[11px] leading-relaxed bg-gray-800 text-white">
-                {msg.content}
-                {msg.timestamp && <div className="text-[9px] mt-1 text-gray-300">{msg.timestamp}</div>}
-              </div>
-            </div>
-          ) : (
-            <div key={msg.id} className="text-[11px] leading-relaxed text-gray-800">
-              <AssistantFormattedMessage content={msg.content} />
+          <div key={msg.id} className="text-[11px] leading-relaxed">
+            <div className={`${msg.role === 'user' ? 'text-gray-900' : 'text-gray-800'}`}>
+              {msg.role === 'assistant'
+                ? <AssistantFormattedMessage content={msg.content} />
+                : msg.content}
               {msg.timestamp && <div className="text-[9px] mt-1 text-gray-400">{msg.timestamp}</div>}
             </div>
-          )
+          </div>
         ))}
 
         {isAITyping && (

@@ -172,11 +172,10 @@ const PROJECT_COLORS: Record<string, string> = {
   '5': '#0891b2',
 };
 
-function NewWorkspaceModal({ open, onClose, onCreate, initialProjectId }: {
+function NewWorkspaceModal({ open, onClose, onCreate }: {
   open: boolean;
   onClose: () => void;
   onCreate: (cfg: NewWsConfig) => void;
-  initialProjectId?: string;
 }) {
   const [wsName, setWsName]       = useState('');
   const [description, setDesc]    = useState('');
@@ -198,13 +197,13 @@ function NewWorkspaceModal({ open, onClose, onCreate, initialProjectId }: {
     if (!open) return;
     setWsName('');
     setDesc('');
-    const first = PROJECTS.find((p) => p.id === initialProjectId) ?? PROJECTS[0];
+    const first = PROJECTS[0];
     setProjectId(first.id);
     const firstModel = MODELS.find(m => m.project === first.name) ?? MODELS[0];
     setModelId(firstModel.id);
     setVersion(firstModel.defaultVersion);
     setColumns(2);
-  }, [open, initialProjectId]);
+  }, [open]);
 
   const handleProjectChange = (pid: string) => {
     setProjectId(pid);
@@ -521,73 +520,32 @@ function WorkspaceCard({ ws }: { ws: Workspace }) {
 
 type FilterStatus = 'all' | 'active' | 'saved' | 'archived';
 
-const CUSTOM_WORKSPACES_STORAGE_KEY = 'noble-ai-custom-workspaces';
+const STATS = [
+  { label: 'Total Sessions',  value: String(WORKSPACES.length),                                       icon: LayoutDashboard, color: '#3F98FF' },
+  { label: 'Active',          value: String(WORKSPACES.filter(w => w.status === 'active').length),    icon: Zap,             color: '#059669' },
+  { label: 'Panels Open',     value: String(WORKSPACES.reduce((s, w) => s + w.panelCount, 0)),        icon: PanelRight,      color: '#7c3aed' },
+  { label: 'AI Messages',     value: String(WORKSPACES.reduce((s, w) => s + w.chatMessages, 0)),      icon: MessageSquare,   color: '#ea580c' },
+  { label: 'Artifacts',       value: String(WORKSPACES.reduce((s, w) => s + w.artifacts, 0)),         icon: BarChart3,       color: '#0891b2' },
+];
 
 export function WorkspacesPage() {
   const [search, setSearch]         = useState('');
   const [filter, setFilter]         = useState<FilterStatus>('all');
   const [showNewModal, setShowNew]  = useState(false);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
-    try {
-      const raw = localStorage.getItem(CUSTOM_WORKSPACES_STORAGE_KEY);
-      const custom = raw ? (JSON.parse(raw) as Workspace[]) : [];
-      return [...custom, ...WORKSPACES];
-    } catch {
-      return WORKSPACES;
-    }
-  });
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const projectIdFilter = new URLSearchParams(location.search).get('projectId');
-  const selectedProject = projectIdFilter ? PROJECTS.find((p) => p.id === projectIdFilter) : null;
-
-  useEffect(() => {
-    const custom = workspaces.filter((w) => w.id.startsWith('custom-ws-'));
-    localStorage.setItem(CUSTOM_WORKSPACES_STORAGE_KEY, JSON.stringify(custom));
-  }, [workspaces]);
-
-  const stats = [
-    { label: 'Total Sessions', value: String(workspaces.length), icon: LayoutDashboard, color: '#3F98FF' },
-    { label: 'Active', value: String(workspaces.filter((w) => w.status === 'active').length), icon: Zap, color: '#059669' },
-    { label: 'Panels Open', value: String(workspaces.reduce((s, w) => s + w.panelCount, 0)), icon: PanelRight, color: '#7c3aed' },
-    { label: 'AI Messages', value: String(workspaces.reduce((s, w) => s + w.chatMessages, 0)), icon: MessageSquare, color: '#ea580c' },
-    { label: 'Artifacts', value: String(workspaces.reduce((s, w) => s + w.artifacts, 0)), icon: BarChart3, color: '#0891b2' },
-  ];
 
   const handleCreate = (cfg: NewWsConfig) => {
-    const project = PROJECTS.find((p) => p.id === cfg.projectId);
-    const newWs: Workspace = {
-      id: `custom-ws-${Date.now()}`,
-      name: cfg.wsName,
-      description: cfg.description.trim() || 'New workspace session',
-      projectId: project?.id ?? null,
-      project: project?.name ?? null,
-      projectColor: project ? (PROJECT_COLORS[project.id] ?? '#9ca3af') : null,
-      status: 'active',
-      panelCount: cfg.columns,
-      chatMessages: 0,
-      lastOpenedBy: 'You',
-      lastOpened: 'Just now',
-      created: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      columns: cfg.columns,
-      tags: ['new'],
-      aiInsights: 0,
-      artifacts: 0,
-    };
-    setWorkspaces((prev) => [newWs, ...prev]);
     setShowNew(false);
-    navigate(`/workspace/${newWs.id}`, { state: cfg });
+    navigate('/workspace/new', { state: cfg });
   };
 
-  const filtered = workspaces.filter(w => {
+  const filtered = WORKSPACES.filter(w => {
     const matchSearch =
       w.name.toLowerCase().includes(search.toLowerCase()) ||
       (w.project ?? '').toLowerCase().includes(search.toLowerCase()) ||
       w.tags.some(t => t.toLowerCase().includes(search.toLowerCase()));
     const matchFilter = filter === 'all' || w.status === filter;
-    const matchProject = !projectIdFilter || w.projectId === projectIdFilter;
-    return matchSearch && matchFilter && matchProject;
+    return matchSearch && matchFilter;
   });
 
   return (
@@ -602,9 +560,7 @@ export function WorkspacesPage() {
               <span className="text-gray-600 font-medium">Workspaces</span>
             </div>
             <h1 className="text-xl font-bold text-gray-900">Workspaces</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              AI lab canvas sessions — your active and saved working environments{selectedProject ? ` · ${selectedProject.name}` : ''}
-            </p>
+            <p className="text-sm text-gray-500 mt-0.5">AI lab canvas sessions — your active and saved working environments</p>
           </div>
           <button
             onClick={() => setShowNew(true)}
@@ -614,12 +570,12 @@ export function WorkspacesPage() {
             New Workspace
           </button>
 
-          <NewWorkspaceModal open={showNewModal} onClose={() => setShowNew(false)} onCreate={handleCreate} initialProjectId={projectIdFilter ?? undefined} />
+          <NewWorkspaceModal open={showNewModal} onClose={() => setShowNew(false)} onCreate={handleCreate} />
         </div>
 
         {/* Stats */}
         <div className="flex gap-5">
-          {stats.map(s => (
+          {STATS.map(s => (
             <div key={s.label} className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: s.color + '15' }}>
                 <s.icon className="w-3.5 h-3.5" style={{ color: s.color }} />
@@ -638,8 +594,7 @@ export function WorkspacesPage() {
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             {(['all', 'active', 'saved', 'archived'] as FilterStatus[]).map(f => {
-              const base = projectIdFilter ? workspaces.filter((w) => w.projectId === projectIdFilter) : workspaces;
-              const count = f === 'all' ? base.length : base.filter(w => w.status === f).length;
+              const count = f === 'all' ? WORKSPACES.length : WORKSPACES.filter(w => w.status === f).length;
               return (
                 <button
                   key={f}
@@ -654,14 +609,6 @@ export function WorkspacesPage() {
                 </button>
               );
             })}
-            {selectedProject && (
-              <button
-                onClick={() => navigate('/workspaces')}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100"
-              >
-                Clear Project Filter
-              </button>
-            )}
           </div>
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />

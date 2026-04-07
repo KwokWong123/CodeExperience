@@ -666,27 +666,7 @@ export function ProjectDetailPage() {
   const models   = PROJECT_MODELS[id ?? ''] ?? [];
   const analysis = PROJECT_ANALYSIS[id ?? ''] ?? [];
   const reports  = PROJECT_REPORTS[id ?? ''] ?? [];
-  const baseProjectWorkspaces = PROJECT_WORKSPACES_BASE[id ?? ''] ?? [];
-  const customProjectWorkspaces = (() => {
-    try {
-      const raw = localStorage.getItem('noble-ai-custom-workspaces');
-      const custom = raw ? (JSON.parse(raw) as Array<{ id: string; name: string; description: string; status: 'active' | 'saved' | 'archived'; columns: 1 | 2 | 3; panelCount: number; lastOpened: string; projectId?: string | null }>) : [];
-      return custom
-        .filter((w) => w.projectId === id)
-        .map((w) => ({
-          id: w.id,
-          name: w.name,
-          description: w.description,
-          status: w.status,
-          columns: w.columns,
-          panelCount: w.panelCount,
-          lastOpened: w.lastOpened,
-        }));
-    } catch {
-      return [] as WorkspaceSummary[];
-    }
-  })();
-  const projectWorkspaces = [...customProjectWorkspaces, ...baseProjectWorkspaces];
+  const baseWorkspaceCounts: Record<string, number> = { '1': 2, '2': 1, '3': 1, '4': 1, '5': 0 };
   const customWorkspaceCount = (() => {
     try {
       const raw = localStorage.getItem('noble-ai-custom-workspaces');
@@ -696,7 +676,7 @@ export function ProjectDetailPage() {
       return 0;
     }
   })();
-  const workspaceCount = baseProjectWorkspaces.length + customWorkspaceCount;
+  const workspaceCount = (baseWorkspaceCounts[id ?? ''] ?? 0) + customWorkspaceCount;
 
   const TABS: { id: Tab; label: string; icon: React.ElementType; count: number }[] = [
     { id: 'overview',  label: 'Overview',  icon: TrendingUp,   count: 0 },
@@ -724,10 +704,10 @@ export function ProjectDetailPage() {
               <Download className="w-3 h-3" /> Export
             </button>
             <button
-              onClick={() => setActiveTab('workspace')}
+              onClick={() => navigate(`/workspaces?projectId=${encodeURIComponent(project.id)}`)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#3F98FF] text-white rounded-lg font-medium hover:bg-[#2563eb] transition-colors shadow-sm"
             >
-              <ExternalLink className="w-3 h-3" /> Project Workspaces
+              <ExternalLink className="w-3 h-3" /> Open Workspaces
             </button>
           </div>
         </div>
@@ -784,7 +764,13 @@ export function ProjectDetailPage() {
           {TABS.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                if (tab.id === 'workspace') {
+                  navigate(`/workspaces?projectId=${encodeURIComponent(project.id)}`);
+                  return;
+                }
+                setActiveTab(tab.id);
+              }}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-[#3F98FF] text-[#3F98FF]'
@@ -871,47 +857,6 @@ export function ProjectDetailPage() {
               ? <EmptyState icon={FileText} label="reports" />
               : <div className="grid grid-cols-1 gap-4">{reports.map(r => <ReportCard key={r.id} rpt={r} />)}</div>
             }
-          </div>
-        )}
-
-        {activeTab === 'workspace' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-sm font-bold text-gray-800">{projectWorkspaces.length} Workspace{projectWorkspaces.length !== 1 ? 's' : ''}</div>
-              <button
-                onClick={() => navigate(`/workspaces?projectId=${encodeURIComponent(project.id)}`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#3F98FF] text-white rounded-lg font-medium hover:bg-[#2563eb] transition-colors"
-              >
-                <ExternalLink className="w-3 h-3" /> Open Full Workspace Manager
-              </button>
-            </div>
-            {projectWorkspaces.length === 0 ? (
-              <EmptyState icon={ExternalLink} label="workspaces" />
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {projectWorkspaces.map((ws) => (
-                  <div key={ws.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-300 hover:shadow-sm transition-all">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-bold text-gray-900 leading-tight truncate pr-2">{ws.name}</h3>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ws.status === 'active' ? 'text-[#3F98FF] bg-[#3F98FF]/10' : ws.status === 'saved' ? 'text-green-700 bg-green-50' : 'text-gray-500 bg-gray-100'}`}>
-                        {ws.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 leading-relaxed mb-3 line-clamp-2">{ws.description}</p>
-                    <div className="flex items-center justify-between text-[11px] text-gray-500 mb-3">
-                      <span>{ws.panelCount} panels · {ws.columns} columns</span>
-                      <span>{ws.lastOpened}</span>
-                    </div>
-                    <button
-                      onClick={() => navigate(`/workspace/${ws.id}`)}
-                      className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg bg-[#3F98FF] text-white hover:bg-[#2563eb] transition-colors"
-                    >
-                      <ExternalLink className="w-3 h-3" /> Open Workspace
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
